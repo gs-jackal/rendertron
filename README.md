@@ -1,9 +1,13 @@
-# Rendertron [![Build status](https://img.shields.io/travis/GoogleChrome/rendertron.svg?style=flat-square)](https://travis-ci.org/GoogleChrome/rendertron)
+# Rendertron [![Build status](https://travis-ci.org/GoogleChrome/rendertron.svg?branch=master)](https://travis-ci.org/GoogleChrome/rendertron) [![NPM rendertron package](https://img.shields.io/npm/v/rendertron.svg)](https://npmjs.org/package/rendertron)
 
-> Rendertron is a dockerized, headless Chrome rendering solution designed to render & serialise web pages on the fly.
+> Rendertron is a headless Chrome rendering solution designed to render & serialise web pages on the fly.
+
+#### :hammer: Built with [Puppeteer](https://github.com/GoogleChrome/puppeteer)
+#### :cloud: Easy deployment to Google Cloud
+#### :mag: Improves SEO
 
 Rendertron is designed to enable your Progressive Web App (PWA) to serve the correct
-content to any bot that doesn't render or execute Javascript. Rendertron runs as a
+content to any bot that doesn't render or execute JavaScript. Rendertron runs as a
 standalone HTTP server. Rendertron renders requested pages using Headless Chrome,
 [auto-detecting](#auto-detecting-loading-function) when your PWA has completed loading
 and serializes the response back to the original request. To use Rendertron, your application
@@ -24,11 +28,15 @@ to be used as a production endpoint. You can use it, but there are no uptime gua
   - [Query parameters](#query-parameters)
   - [Auto detecting loading function](#auto-detecting-loading-function)
   - [Rendering budget timeout](#rendering-budget-timeout)
-  - [Explicit rendering event](#explicit-rendering-event)
   - [Web components](#web-components)
   - [Status codes](#status-codes)
 - [Installing & deploying](#installing--deploying)
+  - [Building](#building)
+  - [Running locally](#running-locally)
+  - [Deploying to Google Cloud Platform](#deploying-to-google-cloud-platform)
+  - [Deploying using Docker](#deploying-using-docker)
   - [Config](#config)
+  - [Troubleshooting](#troubleshooting)
 
 ## Middleware
 Once you have the service up and running, you'll need to implement the differential serving
@@ -37,6 +45,7 @@ layer. This checks the user agent to determine whether prerendering is required.
 This is a list of middleware available to use with the Rendertron service:
  * [Express.js middleware](/middleware)
  * [Firebase functions](https://github.com/justinribeiro/pwa-firebase-functions-botrender) (Community maintained)
+ * [ASP.net core middleware](https://github.com/galamai/AspNetCore.Rendertron) (Community maintained)
 
 Rendertron is also compatible with [prerender.io middleware](https://prerender.io/documentation/install-middleware).
 Note: the user agent lists differ there.
@@ -45,22 +54,33 @@ Note: the user agent lists differ there.
 
 ### Render
 ```
-/render/<url>
+GET /render/<url>
 ```
 
-The `render` endpoint will render your page and serialize your page. Available options:
- * `wc-inject-shadydom` default `false` - used to correctly render Web Components v1. See
- [Using with web components](#web-components) for more information.
+The `render` endpoint will render your page and serialize your page. Options are
+specified as query parameters:
+ * `mobile` defaults to `false`. Enable by passing `?mobile` to request the
+  mobile version of your site.
 
 ### Screenshot
 ```
-/screenshot/<url>
+GET /screenshot/<url>
+POST /screenshot/<url>
 ```
 
-The `screenshot` endpoint can be used to verify that your page is rendering correctly.
-Available options:
- * `width` default `1000` - used to set the viewport width (max 2000)
- * `height` default `1000` - used to set the viewport height (max 2000)
+The `screenshot` endpoint can be used to verify that your page is rendering
+correctly.
+
+Both endpoints support the following query parameters:
+ * `width` defaults to `1000` - specifies viewport width.
+ * `height` defaults to `1000` - specifies viewport height.
+ * `mobile` defaults to `false`. Enable by passing `?mobile` to request the
+  mobile version of your site.
+
+Additional options are available as a JSON string in the `POST` body. See
+[Puppeteer documentation](https://github.com/GoogleChrome/puppeteer/blob/v1.6.0/docs/api.md#pagescreenshotoptions)
+for available options. You cannot specify the `type` (defaults to `jpeg`) and
+`encoding` (defaults to `binary`) parameters.
 
 ## FAQ
 
@@ -78,14 +98,6 @@ are no outstanding network requests and that the page has had ample time to rend
 ### Rendering budget timeout
 There is a hard limit of 10 seconds for rendering. Ensure you don't hit this budget by ensuring
 your application is rendered well before the budget expires.
-
-### Explicit rendering event
-In some cases, the auto loading function may be insufficient, for example if there is content
-being streamed on the page. To explicitly signal when the page is visually complete, fire an
-event as follows:
-```js
-  myElement.dispatchEvent(new Event('render-complete', { bubbles: true, composed: true}));
-```
 
 ### Web components
 Headless Chrome supports web components but shadow DOM is difficult to serialize effectively.
@@ -108,76 +120,32 @@ set the HTTP status returned by the rendering service by adding a meta tag.
 <meta name="render:status_code" content="404" />
 ```
 
-## Installing & deploying
-
-### Dependencies
-This project requires Node 7+ and Docker ([installation instructions](https://docs.docker.com/engine/installation/)). For deployment this
-project uses the [Google Cloud Platform SDK](https://cloud.google.com/sdk/).
-
-### Installing
-Install node dependencies using:
+## Running locally
+To install Rendertron and run it locally, first install Rendertron:
 ```bash
-npm install
+npm install -g rendertron
 ```
 
-Install Chrome:
+With Chrome installed on your machine run the Rendertron CLI:
 ```bash
-apt-get install google-chrome
+rendertron
+```
+
+## Installing & deploying
+
+### Building
+Clone and install dependencies:
+```bash
+git clone https://github.com/GoogleChrome/rendertron.git
+cd rendertron
+npm install
+npm run build
 ```
 
 ### Running locally
 With a local instance of Chrome installed, you can start the server locally:
 ```bash
-npm start
-```
-
-To test a rendering, send a request:
-```
-http://localhost:3000/?url=https://dynamic-meta.appspot.com
-```
-
-### Docker
-After installing docker, build the docker image:
-```bash
-docker build -t rendertron . --no-cache=true
-```
-
-### Running the container
-The container enables the cache to run by default, so be sure to disable the cache when running locally.
-
-Building the container:
-```bash
-docker run -it -p 8080:8080 --name rendertron-container rendertron
-```
-
-In the case where your kernel lacks user namespace support or are receiving a `ECONNREFUSED` error when trying to access the service in the container (as noted in issues [2](https://github.com/GoogleChrome/rendertron/issues/2) and [3](https://github.com/GoogleChrome/rendertron/issues/3)), the two recommended methods below should solve this:
-1. [Recommended] - Use [Jessie Frazelle' seccomp profile](https://github.com/jessfraz/dotfiles/blob/master/etc/docker/seccomp/chrome.json) and `-security-opt` flag
-2. Utilize the `--cap-add SYS_ADMIN` flag
-
-[Recommended] Start a container with the built image using Jessie Frazelle' seccomp profile for Chrome:
-```bash
-wget https://raw.githubusercontent.com/jfrazelle/dotfiles/master/etc/docker/seccomp/chrome.json -O ~/chrome.json
-docker run -it -p 8080:8080 --security-opt seccomp=$HOME/chrome.json --name rendertron-container rendertron
-```
-
-Start a container with the built image using SYS_ADMIN:
-```bash
-docker run -it -p 8080:8080 --cap-add SYS_ADMIN --name rendertron-container rendertron
-```
-
-Load the homepage in any browser:
-```bash
-http://localhost:8080/
-```
-
-Stop the container:
-```bash
-docker kill rendertron-container
-```
-
-Clear containers:
-```bash
-docker rm -f $(docker ps -a -q)
+npm run start
 ```
 
 ### Deploying to Google Cloud Platform
@@ -185,16 +153,22 @@ docker rm -f $(docker ps -a -q)
 gcloud app deploy app.yaml --project <your-project-id>
 ```
 
+### Deploying using Docker
+Rendertron no longer includes a Docker file. Instead, refer to
+[Puppeteer documentation](https://github.com/GoogleChrome/puppeteer/blob/master/docs/troubleshooting.md#running-puppeteer-in-docker)
+on how to deploy run headless Chrome in Docker.
+
 ### Config
 When deploying the service, set configuration variables by including a `config.json` in the
 root. Available configuration options:
- * `analyticsTrackingId` default `""` - set to a Google Analytics property
- [tracking id](https://support.google.com/analytics/answer/1008080?hl=en#trackingID) to
- send Rendertron rendering events to analytics.
- * `cache` default `false` - set to `true` to enable caching on Google Cloud using datastore
- * `debug` default `false` - set to `true` to log console messages from within the
- rendered pages.
- * `renderOnly` - restrict the endpoint to only service requests for certain domains. Specified
- as an array of strings. eg. `['http://render.only.this.domain']`. This is a strict prefix
- match, so ensure you specify the exact protocols that will be used (eg. http, https).
+ * `datastoreCache` default `false` - set to `true` to enable caching on Google Cloud using datastore
+ * `timeout` default `10000` - set the timeout used to render the target page. 
+ * `port` default `3000` - set the port to use for running and listening the rendertron service. Note if process.env.PORT is set, it will be used instead.
+ * `width` default `1000` - set the width (resolution) to be used for rendering the page.
+ * `height` default `1000` - set the height (resolution) to be used for rendering the page.
 
+### Troubleshooting
+If you're having troubles with getting Headless Chrome to run in your
+environment, refer to the
+[troubleshooting guide](https://github.com/GoogleChrome/puppeteer/blob/master/docs/troubleshooting.md)
+for Puppeteer.
